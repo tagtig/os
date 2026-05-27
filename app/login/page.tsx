@@ -34,13 +34,16 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Zeige E-Mail-Feld nur wenn ein User-Account existiert (d.h. nach dem ersten Invite)
+  const showEmail = params.get('user') === '1';
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
 
     const body: Record<string, string> = { password };
-    if (email.trim()) body.email = email.trim();
+    if (showEmail && email.trim()) body.email = email.trim();
 
     const res = await fetch('/api/login', {
       method: 'POST',
@@ -69,25 +72,31 @@ function LoginForm() {
           Account eingerichtet! Melde dich jetzt an.
         </p>
       )}
-      <label className="label" htmlFor="email">
-        E-Mail
-      </label>
-      <input
-        id="email"
-        type="email"
-        autoFocus
-        autoComplete="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="input"
-        placeholder="name@tagtig.com"
-      />
+
+      {showEmail && (
+        <>
+          <label className="label" htmlFor="email">
+            E-Mail
+          </label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="input"
+            placeholder="name@tagtig.com"
+          />
+        </>
+      )}
+
       <label className="label" htmlFor="pw">
         Passwort
       </label>
       <input
         id="pw"
         type="password"
+        autoFocus
         autoComplete="current-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
@@ -105,8 +114,6 @@ function LoginForm() {
 function LoginFormFallback() {
   return (
     <div className="flex flex-col gap-3">
-      <span className="label">E-Mail</span>
-      <div className="input opacity-50" />
       <span className="label">Passwort</span>
       <div className="input opacity-50" />
       <div className="btn-primary mt-2 opacity-50">Anmelden</div>
