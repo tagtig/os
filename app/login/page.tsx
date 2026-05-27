@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useState, type FormEvent } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 export default function LoginPage() {
   return (
@@ -24,7 +24,6 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const router = useRouter();
   const params = useSearchParams();
   const redirect = params.get('redirect') || '/dashboard';
   const invited = params.get('invited') === '1';
@@ -34,16 +33,13 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Zeige E-Mail-Feld nur wenn ein User-Account existiert (d.h. nach dem ersten Invite)
-  const showEmail = params.get('user') === '1';
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
 
     const body: Record<string, string> = { password };
-    if (showEmail && email.trim()) body.email = email.trim();
+    if (email.trim()) body.email = email.trim();
 
     const res = await fetch('/api/login', {
       method: 'POST',
@@ -52,15 +48,15 @@ function LoginForm() {
     });
 
     if (res.ok) {
-      router.push(redirect);
-      router.refresh();
+      // Vollständiger Seitenaufruf statt Client-Navigation → Cookie ist garantiert verfügbar
+      window.location.href = redirect;
     } else {
       const data = await res.json().catch(() => ({}));
       const msgs: Record<string, string> = {
         invalid_credentials: 'E-Mail oder Passwort falsch.',
         invite_pending: 'Dein Account ist noch nicht eingerichtet. Bitte nutze den Einladungslink.',
       };
-      setError(msgs[data.error] ?? 'Falsches Passwort');
+      setError(msgs[data.error] ?? 'Login fehlgeschlagen.');
       setBusy(false);
     }
   }
@@ -73,22 +69,20 @@ function LoginForm() {
         </p>
       )}
 
-      {showEmail && (
-        <>
-          <label className="label" htmlFor="email">
-            E-Mail
-          </label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="input"
-            placeholder="name@tagtig.com"
-          />
-        </>
-      )}
+      <label className="label" htmlFor="email">
+        E-Mail
+      </label>
+      <input
+        id="email"
+        type="email"
+        autoFocus
+        autoComplete="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="input"
+        placeholder="name@tagtig.com"
+        required
+      />
 
       <label className="label" htmlFor="pw">
         Passwort
@@ -96,12 +90,12 @@ function LoginForm() {
       <input
         id="pw"
         type="password"
-        autoFocus
         autoComplete="current-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         className="input"
         placeholder="••••••••"
+        required
       />
       {error && <p className="text-sm text-status-rejected">{error}</p>}
       <button type="submit" disabled={busy} className="btn-primary mt-2">
@@ -114,6 +108,8 @@ function LoginForm() {
 function LoginFormFallback() {
   return (
     <div className="flex flex-col gap-3">
+      <span className="label">E-Mail</span>
+      <div className="input opacity-50" />
       <span className="label">Passwort</span>
       <div className="input opacity-50" />
       <div className="btn-primary mt-2 opacity-50">Anmelden</div>
