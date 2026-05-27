@@ -29,11 +29,13 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // User-Infos via Header an Route Handler + Server Components weitergeben
-  const res = NextResponse.next();
-  res.headers.set('x-user-id', payload.userId);
-  res.headers.set('x-user-role', payload.role);
-  return res;
+  // User-Infos via Request-Header weitergeben (lesbar in Server Components via headers())
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set('x-user-id', payload.userId);
+  requestHeaders.set('x-user-role', payload.role);
+  return NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 }
 
 export const config = {
