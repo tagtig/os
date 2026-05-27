@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, type FormEvent } from 'react';
+import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 export default function LoginPage() {
@@ -23,10 +23,16 @@ export default function LoginPage() {
   );
 }
 
+const ERROR_LABELS: Record<string, string> = {
+  invalid_credentials: 'E-Mail oder Passwort falsch.',
+  invite_pending: 'Account noch nicht eingerichtet – bitte Einladungslink nutzen.',
+  missing_fields: 'Bitte Passwort eingeben.',
+};
+
 const REASON_LABELS: Record<string, string> = {
-  no_cookie: 'Sitzung abgelaufen – bitte neu anmelden.',
-  invalid_token: 'Sitzung ungültig – bitte neu anmelden.',
-  exception: 'Auth-Fehler – bitte neu anmelden.',
+  no_cookie: 'Sitzung abgelaufen.',
+  invalid_token: 'Sitzung ungültig.',
+  exception: 'Technischer Fehler – bitte neu anmelden.',
 };
 
 function LoginForm() {
@@ -34,42 +40,25 @@ function LoginForm() {
   const redirect = params.get('redirect') || '/dashboard';
   const invited = params.get('invited') === '1';
   const reason = params.get('reason') ?? '';
+  const errorCode = params.get('error') ?? '';
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-
-    const body: Record<string, string> = { password };
-    if (email.trim()) body.email = email.trim();
-
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-
-    if (res.ok) {
-      // Vollständiger Seitenaufruf → Cookie garantiert für alle Folge-Requests verfügbar
-      window.location.href = redirect.startsWith('/') ? redirect : '/dashboard';
-    } else {
-      const data = await res.json().catch(() => ({}));
-      const msgs: Record<string, string> = {
-        invalid_credentials: 'E-Mail oder Passwort falsch.',
-        invite_pending: 'Account noch nicht eingerichtet – bitte Einladungslink nutzen.',
-      };
-      setError(msgs[data.error] ?? `Login fehlgeschlagen (${data.error ?? 'unbekannt'}).`);
-      setBusy(false);
-    }
-  }
-
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-3">
+    /*
+     * Klassisches HTML-Form mit action="/api/login" und method="POST".
+     * Der Server setzt das Cookie direkt in der Redirect-Response → kein
+     * fetch()-Timing-Problem mehr. Fehler kommen als ?error=... zurück.
+     */
+    <form
+      action="/api/login"
+      method="POST"
+      className="flex flex-col gap-3"
+      onSubmit={() => setBusy(true)}
+    >
+      {/* Redirect-Ziel als hidden field */}
+      <input type="hidden" name="redirect" value={redirect.startsWith('/') ? redirect : '/dashboard'} />
+
       {invited && (
         <p className="rounded-button bg-status-interview/10 px-3 py-2 text-sm text-status-interview">
           Account eingerichtet! Melde dich jetzt an.
@@ -77,8 +66,14 @@ function LoginForm() {
       )}
 
       {reason && REASON_LABELS[reason] && (
-        <p className="rounded-button bg-status-feedback/10 px-3 py-2 text-sm text-status-feedback">
+        <p className="rounded-button bg-amber-50 px-3 py-2 text-sm text-amber-700">
           {REASON_LABELS[reason]}
+        </p>
+      )}
+
+      {errorCode && (
+        <p className="text-sm text-status-rejected">
+          {ERROR_LABELS[errorCode] ?? `Fehler: ${errorCode}`}
         </p>
       )}
 
@@ -87,11 +82,10 @@ function LoginForm() {
       </label>
       <input
         id="email"
+        name="email"
         type="email"
         autoFocus
         autoComplete="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
         className="input"
         placeholder="name@tagtig.com"
       />
@@ -101,15 +95,14 @@ function LoginForm() {
       </label>
       <input
         id="pw"
+        name="password"
         type="password"
         autoComplete="current-password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
         className="input"
         placeholder="••••••••"
         required
       />
-      {error && <p className="text-sm text-status-rejected">{error}</p>}
+
       <button type="submit" disabled={busy} className="btn-primary mt-2">
         {busy ? 'Bitte warten…' : 'Anmelden'}
       </button>

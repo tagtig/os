@@ -1,60 +1,87 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { AUTH_COOKIE, COOKIE_MAX_AGE, appPassword, issueToken } from '@/lib/auth';
 import { getUserByEmail, updateLastLogin } from '@/lib/supabase/users-repo';
 import { verifyPassword } from '@/lib/password';
 
-export async function POST(req: Request) {
-  let body: unknown;
+/** Liest Body als JSON oder als HTML-Form (application/x-www-form-urlencoded). */
+async function parseBody(req: NextRequest): Promise<{ email?: string; password?: string; redirect?: string }> {
+  const ct = req.headers.get('content-type') ?? '';
+  if (ct.includes('application/json')) {
+    const data = await req.json().catch(() => ({}));
+    return data as { email?: string; password?: string; redirect?: string };
+  }
+  // HTML-Form POST
+  const formData = await req.formData().catch(() => new FormData());
+  return {
+    email: (formData.get('email') as string | null) ?? undefined,
+    password: (formData.get('password') as string | null) ?? undefined,
+    redirect: (formData.get('redirect') as string | null) ?? undefined,
+  };
+}
+
+function loginUrl(req: NextRequest, error: string, redirect?: string): URL {
+  const url = new URL('/login', req.url);
+  url.searchParams.set('error', error);
+  if (redirect?.startsWith('/')) url.searchParams.set('redirect', redirect);
+  return url;
+}
+
+export async function POST(req: NextRequest) {
+  let email: string | undefined;
+  let password: string | undefined;
+  let redirectTo: string | undefined;
+
   try {
-    body = await req.json();
+    ({ email, password, redirect: redirectTo } = await parseBody(req));
   } catch {
-    return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
+    return NextResponse.redirect(loginUrl(req, 'invalid_body'), { status: 303 });
   }
 
-  const { email, password } = body as { email?: string; password?: string };
-
   if (!password) {
-    return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
+    return NextResponse.redirect(loginUrl(req, 'missing_fields', redirectTo), { status: 303 });
   }
 
   let userId: string;
   let role: 'admin' | 'user' = 'admin';
 
-  if (email) {
-    // Email + Passwort Login
-    const user = await getUserByEmail(email).catch(() => null);
+  if (email?.trim()) {
+    // Email + Passwort Login via DB
+    const user = await getUserByEmail(email.trim()).catch(() => null);
 
     if (!user || !user.is_active) {
-      return NextResponse.json({ error: 'invalid_credentials' }, { status: 401 });
+      return NextResponse.redirect(loginUrl(req, 'invalid_credentials', redirectTo), { status: 303 });
     }
 
     if (!user.password_hash) {
-      // Einladung wurde noch nicht angenommen
-      return NextResponse.json({ error: 'invite_pending' }, { status: 401 });
+      return NextResponse.redirect(loginUrl(req, 'invite_pending', redirectTo), { status: 303 });
     }
 
     const valid = await verifyPassword(password, user.password_hash);
     if (!valid) {
-      return NextResponse.json({ error: 'invalid_credentials' }, { status: 401 });
+      return NextResponse.redirect(loginUrl(req, 'invalid_credentials', redirectTo), { status: 303 });
     }
 
     userId = user.id;
     role = user.role;
     await updateLastLogin(userId).catch(() => {});
   } else if (appPassword() && password === appPassword()) {
-    // Legacy: geteiltes Passwort → Admin
+    // Legacy: geteiltes APP_PASSWORD → Admin
     userId = 'legacy-admin';
     role = 'admin';
   } else {
-    return NextResponse.json({ error: 'invalid_credentials' }, { status: 401 });
+    return NextResponse.redirect(loginUrl(req, 'invalid_credentials', redirectTo), { status: 303 });
   }
 
   const token = await issueToken(userId, role);
-  const res = NextResponse.json({ ok: true });
+  const dest = redirectTo?.startsWith('/') ? redirectTo : '/dashboard';
+
+  // Server-seitiger 303-Redirect + Set-Cookie in einer Response
+  // → Browser speichert Cookie garantiert, bevor er zur nächsten Seite navigiert
+  const res = NextResponse.redirect(new URL(dest, req.url), { status: 303 });
   res.cookies.set(AUTH_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: true,
     path: '/',
     maxAge: COOKIE_MAX_AGE,
   });
