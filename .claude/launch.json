@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tagtig-os",
+      "runtimeExecutable": "/Users/benduering/Documents/tagtig/.node/bin/node",
+      "runtimeArgs": ["/Users/benduering/Documents/tagtig/.node/bin/npm", "run", "dev"],
+      "port": 3000
+    }
+  ]
+}

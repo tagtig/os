@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    @apply bg-page text-ink-primary antialiased;
+    font-family: var(--font-instrument-sans), system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  ::selection {
+    @apply bg-accent text-ink-on-dark;
+  }
+}
+
+@layer components {
+  .section-label {
+    @apply font-mono text-[11px] font-medium uppercase tracking-section text-ink-secondary;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-button px-4 py-[10px] text-sm font-semibold whitespace-nowrap transition-colors;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-ink-on-dark hover:bg-accent-hover;
+  }
+  .btn-secondary {
+    @apply btn bg-card text-ink-primary border border-line hover:bg-subtle hover:border-line-strong;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-ink-primary hover:bg-subtle;
+  }
+
+  .card {
+    @apply bg-card border border-line rounded-card p-6;
+  }
+
+  .input {
+    @apply w-full bg-subtle border border-transparent rounded-button h-[42px] px-4 text-sm text-ink-primary placeholder:text-ink-muted outline-none transition-colors focus:bg-card focus:border-line-strong;
+  }
+
+  .textarea {
+    @apply w-full bg-subtle border border-transparent rounded-button px-4 py-2.5 text-sm text-ink-primary placeholder:text-ink-muted outline-none transition-colors focus:bg-card focus:border-line-strong;
+  }
+
+  .select {
+    @apply input appearance-none pr-10 cursor-pointer;
+  }
+
+  .label {
+    @apply font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-ink-secondary mb-1 block;
+  }
+}
