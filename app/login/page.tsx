@@ -27,7 +27,9 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const redirect = params.get('redirect') || '/dashboard';
+  const invited = params.get('invited') === '1';
 
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -36,29 +38,56 @@ function LoginForm() {
     e.preventDefault();
     setBusy(true);
     setError(null);
+
+    const body: Record<string, string> = { password };
+    if (email.trim()) body.email = email.trim();
+
     const res = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify(body),
     });
+
     if (res.ok) {
       router.push(redirect);
       router.refresh();
     } else {
-      setError('Falsches Passwort');
+      const data = await res.json().catch(() => ({}));
+      const msgs: Record<string, string> = {
+        invalid_credentials: 'E-Mail oder Passwort falsch.',
+        invite_pending: 'Dein Account ist noch nicht eingerichtet. Bitte nutze den Einladungslink.',
+      };
+      setError(msgs[data.error] ?? 'Falsches Passwort');
       setBusy(false);
     }
   }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      {invited && (
+        <p className="rounded-button bg-status-interview/10 px-3 py-2 text-sm text-status-interview">
+          Account eingerichtet! Melde dich jetzt an.
+        </p>
+      )}
+      <label className="label" htmlFor="email">
+        E-Mail
+      </label>
+      <input
+        id="email"
+        type="email"
+        autoFocus
+        autoComplete="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="input"
+        placeholder="name@tagtig.com"
+      />
       <label className="label" htmlFor="pw">
         Passwort
       </label>
       <input
         id="pw"
         type="password"
-        autoFocus
         autoComplete="current-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
@@ -67,7 +96,7 @@ function LoginForm() {
       />
       {error && <p className="text-sm text-status-rejected">{error}</p>}
       <button type="submit" disabled={busy} className="btn-primary mt-2">
-        {busy ? 'Bitte warten…' : 'Login'}
+        {busy ? 'Bitte warten…' : 'Anmelden'}
       </button>
     </form>
   );
@@ -76,9 +105,11 @@ function LoginForm() {
 function LoginFormFallback() {
   return (
     <div className="flex flex-col gap-3">
+      <span className="label">E-Mail</span>
+      <div className="input opacity-50" />
       <span className="label">Passwort</span>
       <div className="input opacity-50" />
-      <div className="btn-primary mt-2 opacity-50">Login</div>
+      <div className="btn-primary mt-2 opacity-50">Anmelden</div>
     </div>
   );
 }

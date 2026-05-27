@@ -21,7 +21,13 @@ const SECTIONS: { label: string; items: Item[] }[] = [
   },
 ];
 
-export function Sidebar({ user }: { user: string }) {
+type Props = {
+  user: string;
+  email?: string;
+  role?: 'admin' | 'user';
+};
+
+export function Sidebar({ user, email, role }: Props) {
   const pathname = usePathname() ?? '';
 
   return (
@@ -61,18 +67,35 @@ export function Sidebar({ user }: { user: string }) {
         </nav>
       ))}
 
+      {/* User-Info */}
       <div className="mx-3 mt-auto flex items-center gap-3 rounded-button border border-line p-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-subtle font-mono text-[11px] text-ink-secondary">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-subtle font-mono text-[11px] font-semibold text-ink-secondary">
           {user.slice(0, 2).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-semibold text-ink-primary">{user}</div>
-          <div className="truncate text-xs text-ink-secondary">tagtig OS</div>
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-[13px] font-semibold text-ink-primary">{user}</span>
+            {role && (
+              <span
+                className={cn(
+                  'rounded-pill px-1 py-0.5 font-mono text-[9px] font-medium',
+                  role === 'admin'
+                    ? 'bg-accent/10 text-accent'
+                    : 'bg-subtle text-ink-muted',
+                )}
+              >
+                {role === 'admin' ? 'Admin' : 'User'}
+              </span>
+            )}
+          </div>
+          <div className="truncate text-[11px] text-ink-secondary">
+            {email || 'tagtig OS'}
+          </div>
         </div>
         <Link
           href="/logout"
           title="Abmelden"
-          className="text-ink-muted hover:text-ink-primary"
+          className="shrink-0 text-ink-muted hover:text-ink-primary"
         >
           ⎋
         </Link>
