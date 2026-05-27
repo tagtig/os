@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { AUTH_COOKIE, authEnabled, verifyToken } from '@/lib/auth';
 
-const PUBLIC_PATHS = new Set(['/login', '/api/login']);
+const PUBLIC_PATHS = new Set(['/login', '/api/login', '/api/auth-check']);
 const PUBLIC_PREFIXES = ['/invite', '/api/invite'];
 
 export async function middleware(req: NextRequest) {
@@ -20,12 +20,27 @@ export async function middleware(req: NextRequest) {
   if (!authEnabled()) return NextResponse.next();
 
   const token = req.cookies.get(AUTH_COOKIE)?.value;
-  const payload = await verifyToken(token);
+
+  let payload = null;
+  let reason = 'unknown';
+
+  try {
+    if (!token) {
+      reason = 'no_cookie';
+    } else {
+      payload = await verifyToken(token);
+      reason = payload ? 'ok' : 'invalid_token';
+    }
+  } catch (err) {
+    reason = 'exception';
+    console.error('[auth] verifyToken threw:', err);
+  }
 
   if (!payload) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirect', pathname);
+    url.searchParams.set('reason', reason);
     return NextResponse.redirect(url);
   }
 

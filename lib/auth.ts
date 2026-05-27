@@ -9,7 +9,8 @@ export function authEnabled(): boolean {
 }
 
 function secret(): string {
-  return process.env.AUTH_SECRET || DEV_FALLBACK_SECRET;
+  // AUTH_SECRET preferred; APP_PASSWORD as reliable fallback (always set in Vercel)
+  return process.env.AUTH_SECRET || process.env.APP_PASSWORD || DEV_FALLBACK_SECRET;
 }
 
 export function appPassword(): string {
@@ -53,42 +54,72 @@ export type TokenPayload = {
 };
 
 /**
- * Neues Token-Format: {userId}:{role}:{issuedAt}:{expiresAt}:{sig}
+ * Token-Format: base64(JSON{userId,role,iat,exp}) + "." + hmac-hex
+ * Das JSON wird base64-kodiert um Cookie-Encoding-Probleme zu vermeiden.
  * Legacy-Format (Rückwärtskompatibilität): {issuedAt}.{expiresAt}.{sig}
  */
 export async function issueToken(userId: string, role: 'admin' | 'user'): Promise<string> {
-  const issuedAt = Date.now();
-  const expiresAt = issuedAt + SEVEN_DAYS * 1000;
-  const payload = `${userId}:${role}:${issuedAt}:${expiresAt}`;
+  const iat = Date.now();
+  const exp = iat + SEVEN_DAYS * 1000;
+  const payload = JSON.stringify({ userId, role, iat, exp });
   const sig = await hmac(payload);
-  return `${payload}:${sig}`;
+  // btoa is available in both Edge and Node runtimes (Node 16+)
+  const b64 = btoa(payload);
+  return `${b64}.${sig}`;
 }
 
 export async function verifyToken(token: string | undefined | null): Promise<TokenPayload | null> {
   if (!token) return null;
 
-  // Neues Format: 5 Teile, getrennt durch ":"
-  const parts = token.split(':');
-  if (parts.length === 5) {
-    const [userId, role, issuedAt, expiresAt, sig] = parts;
-    const payload = `${userId}:${role}:${issuedAt}:${expiresAt}`;
-    const expected = await hmac(payload);
-    if (!constantTimeEqualHex(sig, expected)) return null;
-    const exp = Number(expiresAt);
-    if (!Number.isFinite(exp) || exp < Date.now()) return null;
-    if (role !== 'admin' && role !== 'user') return null;
-    return { userId, role: role as 'admin' | 'user' };
-  }
+  try {
+    // Neues Format: base64(json).hmac-hex
+    const dotIdx = token.indexOf('.');
+    if (dotIdx > 0) {
+      const b64 = token.slice(0, dotIdx);
+      const sig = token.slice(dotIdx + 1);
 
-  // Legacy-Format: 3 Teile, getrennt durch "."
-  const dotParts = token.split('.');
-  if (dotParts.length === 3) {
-    const [issuedAt, expiresAt, sig] = dotParts;
-    const expected = await hmac(`${issuedAt}.${expiresAt}`);
-    if (!constantTimeEqualHex(sig, expected)) return null;
-    const exp = Number(expiresAt);
-    if (!Number.isFinite(exp) || exp < Date.now()) return null;
-    return { userId: 'legacy-admin', role: 'admin' };
+      // Only try this branch if sig looks like a hex string (64 chars, legacy has shorter or different format)
+      if (sig.length === 64 && /^[0-9a-f]+$/.test(sig)) {
+        try {
+          const payload = atob(b64);
+          const expected = await hmac(payload);
+          if (!constantTimeEqualHex(sig, expected)) return null;
+          const data = JSON.parse(payload) as { userId?: string; role?: string; exp?: number };
+          if (!data.userId || !data.role) return null;
+          if (typeof data.exp !== 'number' || data.exp < Date.now()) return null;
+          if (data.role !== 'admin' && data.role !== 'user') return null;
+          return { userId: data.userId, role: data.role as 'admin' | 'user' };
+        } catch {
+          // base64 decode or JSON parse failed — fall through to legacy
+        }
+      }
+    }
+
+    // Legacy-Format: {issuedAt}.{expiresAt}.{sig}
+    const parts = token.split('.');
+    if (parts.length === 3) {
+      const [issuedAt, expiresAt, sig] = parts;
+      const expected = await hmac(`${issuedAt}.${expiresAt}`);
+      if (!constantTimeEqualHex(sig, expected)) return null;
+      const exp = Number(expiresAt);
+      if (!Number.isFinite(exp) || exp < Date.now()) return null;
+      return { userId: 'legacy-admin', role: 'admin' };
+    }
+
+    // Old colon-format (before base64 change) — try to parse for backwards compat
+    const colonParts = token.split(':');
+    if (colonParts.length === 5) {
+      const [userId, role, issuedAt, expiresAt, sig] = colonParts;
+      const payload = `${userId}:${role}:${issuedAt}:${expiresAt}`;
+      const expected = await hmac(payload);
+      if (!constantTimeEqualHex(sig, expected)) return null;
+      const exp = Number(expiresAt);
+      if (!Number.isFinite(exp) || exp < Date.now()) return null;
+      if (role !== 'admin' && role !== 'user') return null;
+      return { userId, role: role as 'admin' | 'user' };
+    }
+  } catch {
+    return null;
   }
 
   return null;

@@ -23,10 +23,17 @@ export default function LoginPage() {
   );
 }
 
+const REASON_LABELS: Record<string, string> = {
+  no_cookie: 'Sitzung abgelaufen – bitte neu anmelden.',
+  invalid_token: 'Sitzung ungültig – bitte neu anmelden.',
+  exception: 'Auth-Fehler – bitte neu anmelden.',
+};
+
 function LoginForm() {
   const params = useSearchParams();
   const redirect = params.get('redirect') || '/dashboard';
   const invited = params.get('invited') === '1';
+  const reason = params.get('reason') ?? '';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,15 +55,15 @@ function LoginForm() {
     });
 
     if (res.ok) {
-      // Vollständiger Seitenaufruf statt Client-Navigation → Cookie ist garantiert verfügbar
-      window.location.href = redirect;
+      // Vollständiger Seitenaufruf → Cookie garantiert für alle Folge-Requests verfügbar
+      window.location.href = redirect.startsWith('/') ? redirect : '/dashboard';
     } else {
       const data = await res.json().catch(() => ({}));
       const msgs: Record<string, string> = {
         invalid_credentials: 'E-Mail oder Passwort falsch.',
-        invite_pending: 'Dein Account ist noch nicht eingerichtet. Bitte nutze den Einladungslink.',
+        invite_pending: 'Account noch nicht eingerichtet – bitte Einladungslink nutzen.',
       };
-      setError(msgs[data.error] ?? 'Login fehlgeschlagen.');
+      setError(msgs[data.error] ?? `Login fehlgeschlagen (${data.error ?? 'unbekannt'}).`);
       setBusy(false);
     }
   }
@@ -66,6 +73,12 @@ function LoginForm() {
       {invited && (
         <p className="rounded-button bg-status-interview/10 px-3 py-2 text-sm text-status-interview">
           Account eingerichtet! Melde dich jetzt an.
+        </p>
+      )}
+
+      {reason && REASON_LABELS[reason] && (
+        <p className="rounded-button bg-status-feedback/10 px-3 py-2 text-sm text-status-feedback">
+          {REASON_LABELS[reason]}
         </p>
       )}
 
@@ -81,7 +94,6 @@ function LoginForm() {
         onChange={(e) => setEmail(e.target.value)}
         className="input"
         placeholder="name@tagtig.com"
-        required
       />
 
       <label className="label" htmlFor="pw">
